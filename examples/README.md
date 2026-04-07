@@ -2,9 +2,7 @@
 
 本目录包含复现计划生成器的使用示例。
 
-## ContextPilot 论文复现计划
-
-文件: [contextpilot_example.py](contextpilot_example.py)
+## 论文复现计划
 
 ### 使用方式
 
