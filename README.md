@@ -144,7 +144,7 @@ output/
 ```yaml
 # 模型设置
 model:
-  name: "gpt-4o"
+  name: "kimi-k2.5"
   api_key: "${OPENAI_API_KEY}"  # 支持环境变量
   base_url: null                 # 自定义API端点
   api_style: "openai_compatible" # 或 agent_claude / agent_kimi
@@ -195,7 +195,7 @@ print(markdown)
 | 版本 | 状态 | 关键特性 |
 |------|------|----------|
 | v0.3 | ✅ | Agent-centric架构，支持Claude/Codex/Kimi |
-| v0.4 | ✅ | 直接输出Markdown，移除JSON中间层 |
+| v0.4 | ✅ | 直接输出Markdown方案 |
 | v0.5 | 🚧 | 独立Risk/Gap分析模块 |
 | v0.6 | 📋 | reproduce.sh自动生成 |
 | v0.7 | 📋 | 自动化测试代码生成 |
