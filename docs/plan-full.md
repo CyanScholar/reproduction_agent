@@ -6,47 +6,67 @@
 
 ---
 
-## 功能范围
+## 当前状态 (v0.4)
 
-| 功能 | 完整版实现 | 对比 MVP |
-|------|-----------|---------|
-| 论文解析 | PDF / URL / LaTeX | MVP 仅 PDF |
-| API调用 | OpenAI / FastAPI /.. | MVP 仅 OpenAI |
-| 规划阶段 | 可配置多阶段 pipeline | MVP 固定 3 阶段 |
-| 风险分析 | 独立 skill 模块 | MVP 合并到 Phase 2 |
-| 差距检测 | 独立模块，支持交叉验证 | MVP 合并到 Phase 2 |
-| 验收方案 | 完整测试代码生成 | MVP 仅清单 |
-| 输出格式 | 文档 + 脚本 + 测试文件 | MVP 仅 Markdown + JSON |
-| Skills 体系 | 完整 Skills 机制 (loader + context 注入) | MVP 内嵌 Prompt |
-| 脚本生成 | reproduce.sh 自动生成 | MVP 无 |
-| 人工反馈 | 模块划分编辑、scope 删减、目标锁定 | MVP 无 |
+| 功能 | 当前实现 | 完整版目标 |
+|------|----------|-----------|
+| 论文解析 | PDF / URL / 搜索关键词 | PDF / URL / LaTeX / arXiv |
+| API调用 | Claude / Codex / Kimi / OpenAI | + vLLM / Ollama |
+| 规划阶段 | Agent单次调用 (规划+风险+验收) | 可配置多阶段pipeline |
+| 风险分析 | Agent输出结构化风险 | 独立Risk模块 + 交叉验证 |
+| 差距检测 | Agent输出 | 独立Gap Detection模块 |
+| 验收方案 | 测试清单 | 完整测试代码生成 |
+| 输出格式 | Markdown + metadata | Markdown + JSON + 脚本 + 配置 |
+| Skills体系 | Python内嵌 + Context | 完整Skill机制 (loader + context注入) |
+| 脚本生成 | ❌ | reproduce.sh自动生成 |
+| 人工反馈 | ❌ | 交互式模块编辑 |
 
 ---
 
-## 架构升级
+## 架构
 
-### 多格式输入
+### 双模式架构 (已稳定)
 
 ```
-Paper Input (PDF/URL/LaTeX)
-    → Agent → 对应 Parser
-    → PaperContext (统一结构)
+Paper Input
+    → ReproductionAgent
+        → [Agent Mode] build_task_prompt() → AgentProvider.run_task() → Markdown
+        → [Classic Mode] parse → LLM call → Markdown
+    → 人工反馈 (可选)
+    → 输出生成 → Markdown + metadata + scripts
 ```
 
+### 多层技能体系
 
-### 多模型后端
+```
+Skills (工具链)
+    └── tools.py: arXiv / Scholar / GitHub / PwC
+
+Context (专家经验)
+    ├── ml-paper-patterns.md
+    ├── reproduction-expert.md
+    └── risk-taxonomy.md
+
+Scripts (可执行工具)
+    └── core/*.py: 核心逻辑
+```
+
+---
+
+## 多模型后端
 
 ```python
 ModelProvider (经典)
-    - OpenAICompatibleProvider
-    - AnthropicProvider
+    - OpenAICompatibleProvider    # OpenAI / Kimi / DeepSeek / vLLM
+    - AnthropicProvider           # 原生Anthropic API
+
 AgentProvider (Agent-centric)
-    - ClaudeAgentProvider  # Anthropic tool_use
-    - CodexAgentProvider   # OpenAI Responses API
-    - KimiAgentProvider    # OpenAI-compatible + file understanding
+    - ClaudeAgentProvider         # Anthropic tool_use
+    - CodexAgentProvider          # OpenAI Responses API
+    - KimiAgentProvider           # OpenAI-compatible + file understanding
 ```
 
-通过 `config.yaml` 配置切换：
+配置切换：
 ```yaml
 model:
   provider: agent_claude  # agent_claude / agent_codex / agent_kimi / openai / anthropic
@@ -54,130 +74,202 @@ model:
   temperature: 0.2
 ```
 
-### Skills 体系
-
-Skills 已重构为 Agent-centric 架构：
-- 原有 Markdown skill 文件（planning / risk-analysis / acceptance / gap-detection）的知识已编译进 `core/task_prompt.py`，由 `build_task_prompt()` 统一生成任务描述
-- 工具函数合并到 `skills/tools.py`，包含 arXiv / Scholar / GitHub / PwC 等外部查询能力
-- Agent 在单次调用中自主完成规划、风险评估、验收方案生成
-
-```
-core/
-├── task_prompt.py       # 编译后的 skill 知识 → 统一任务 prompt
-skills/
-└── tools.py             # 工具集（arXiv/Scholar/GitHub/PwC）
-```
-
-### 自动化输出
-
-```
-output/
-├── plan.md              # 复现计划文档
-├── plan.json            # 结构化数据
-├── reproduce.sh         # 一键复现脚本
-├── tests/
-│   ├── test_smoke.py    # 冒烟测试
-│   ├── test_unit.py     # 单元测试
-│   └── test_benchmark.py # 基准测试
-└── configs/
-    └── hyperparams.yaml # 超参数配置
-```
-
 ---
 
-## 新增模块
+## Agent能力矩阵
 
-### 1. PDF 解析器 (`core/pdf_parser.py`)
-- PyMuPDF 提取文本和图表
-- GROBID 学术结构解析（可选）
-- 图表 OCR 提取关键数值
-
-### 2. LaTeX 解析器 (`core/latex_parser.py`)
-- section/subsection 结构提取
-- 公式提取与标注
-- figure/table 引用解析
-
-### 3. 差距检测 skill (`skills/gap-detection.md`)
-- 独立于风险分析
-- 交叉引用论文各节寻找矛盾
-- 与同领域常见做法对比
-
-### 4. 脚本生成 skill (`skills/script-generation.md`)
-- 生成 `reproduce.sh` (环境搭建 + 训练 + 评估)
-- 生成测试框架代码
-- 生成超参数配置文件
-
-### 5. 人工反馈接口 (`core/feedback.py`)
-- 模块划分可编辑
-- Scope 删减
-- 第一轮目标锁定
-- 支持 CLI 交互和 API 回调
-
----
-
-## 执行流程 (完整版)
-
-### Agent-centric 单次委托流程
-
-```
-Paper Input
-    → ReproductionAgent.generate_plan()
-    → [Agent Mode]
-        build_task_prompt(paper_text)   # 构建统一任务描述
-        → AgentProvider.run_task()      # 单次 Agent 调用
-        → Agent 自主完成：规划 + 风险 + 差距 + 验收
-        → 解析返回 → ExperimentPlan
-    → [Classic Mode]
-        LLM call (JSON 输出)
-        → ExperimentPlan.from_dict()
-    → [人工反馈点: 模块划分/scope 调整]（可选）
-    → 输出生成(template.py) → Markdown + JSON
-```
-
----
-
-## Agent 能力矩阵
-
-| Provider | tool_use | web_search | PDF理解 | ReAct循环 |
-|----------|----------|------------|---------|----------|
-| ClaudeAgent | ✅ Anthropic native | 通过工具 | base64 document | ✅ |
-| CodexAgent | ✅ Responses API | ✅ 内置 | 待实现 | ✅ |
-| KimiAgent | ✅ OpenAI-compat | ✅ $web_search | ✅ file-extract | ✅ |
-
----
-
-## 评测方案
-
-| 评测维度 | 方法 |
-|---------|------|
-| 计划可执行性 | 人工打分 (1-5)，至少 3 位评估者 |
-| Baseline 对比 | 与 Paper2Code 生成结果对比 |
-| 标准 benchmark | SciReplicate-Bench / ResearchCodeBench |
-| 真实场景验证 | 至少在 1 个真实科研任务中跑通并被同学使用 |
-| 失败模式分析 | 记录不可靠场景，说明何时需人工接管 |
+| Provider | API Style | tool_use | web_search | PDF理解 | 状态 |
+|----------|-----------|----------|------------|---------|------|
+| Claude | agent_claude | ✅ Anthropic native | 通过工具 | base64 document | ✅ |
+| Codex | agent_codex | ✅ Responses API | ✅ 内置 | 待实现 | ✅ |
+| Kimi | agent_kimi | ✅ OpenAI-compat | ✅ $web_search | ✅ file-extract | ✅ |
+| vLLM | openai_compatible | ❌ | ❌ | ❌ | 📋 |
+| Ollama | openai_compatible | ❌ | ❌ | ❌ | 📋 |
 
 ---
 
 ## 版本路线图
 
-| 版本 | 里程碑 | 关键特性 |
-|------|--------|---------|
-| v0.2 | 多模型 | 添加 Claude 支持 |
-| v0.3 | 多格式 | PDF 解析支持 |
-| v0.4 | 脚本生成 | reproduce.sh 自动生成 |
-| v0.5 | 测试生成 | 自动化测试代码生成 |
-| v0.6 | 差距检测 | 独立 gap-detection skill |
-| v0.7 | 人工反馈 | 交互式模块编辑 |
-| v1.0 | 完整版 | 全部特性 + 评测报告 |
+| 版本 | 里程碑 | 关键特性 | 状态 |
+|------|--------|----------|------|
+| v0.3 | Agent架构 | 支持Claude/Codex/Kimi Agent模式 | ✅ |
+| v0.4 | 直接输出 | 移除JSON中间层，直接输出Markdown | ✅ |
+| v0.5 | 独立模块 | Risk/Gap分析模块化 | 🚧 |
+| v0.6 | 脚本生成 | reproduce.sh自动生成 | 📋 |
+| v0.7 | 测试生成 | 自动化测试代码生成 | 📋 |
+| v0.8 | LaTeX支持 | LaTeX源文件解析 | 📋 |
+| v0.9 | 人工反馈 | 交互式模块编辑 | 📋 |
+| v1.0 | 完整版 | 全部特性 + 评测报告 | 📋 |
+
+---
+
+## 新增模块规划
+
+### v0.5 - 独立分析模块
+
+```python
+# core/risk_analyzer.py
+class RiskAnalyzer:
+    """独立风险分析模块"""
+    def analyze(self, paper: PaperContext, plan: str) -> RiskMatrix
+
+# core/gap_detector.py
+class GapDetector:
+    """独立差距检测模块"""
+    def detect(self, paper: PaperContext) -> GapReport
+    def cross_validate(self, sections: List[Section]) -> List[Inconsistency]
+```
+
+### v0.6 - 脚本生成
+
+```python
+# core/script_generator.py
+class ScriptGenerator:
+    """自动化脚本生成"""
+    def generate_reproduce_sh(self, plan: ExperimentPlan) -> str
+    def generate_config_yaml(self, plan: ExperimentPlan) -> str
+```
+
+输出结构：
+```
+output/
+├── plan.md                   # 复现计划文档
+├── plan.json                 # 结构化数据
+├── reproduce.sh              # 一键复现脚本
+├── configs/
+│   └── hyperparams.yaml      # 超参数配置
+├── tests/
+│   ├── test_smoke.py         # 冒烟测试
+│   ├── test_unit.py          # 单元测试
+│   └── test_benchmark.py     # 基准测试
+├── trajectories.json         # LLM调用轨迹
+└── cost_summary.json         # 成本统计
+```
+
+### v0.7 - 测试代码生成
+
+```python
+# core/test_generator.py
+class TestGenerator:
+    """自动化测试代码生成"""
+    def generate_smoke_tests(self, plan: ExperimentPlan) -> str
+    def generate_unit_tests(self, plan: ExperimentPlan) -> str
+    def generate_benchmark_tests(self, plan: ExperimentPlan) -> str
+```
+
+### v0.8 - LaTeX解析
+
+```python
+# core/latex_parser.py
+class LaTeXParser:
+    """LaTeX源文件解析"""
+    def parse(self, latex_path: Path) -> PaperContext
+    def extract_equations(self) -> List[Equation]
+    def extract_figures(self) -> List[Figure]
+    def extract_tables(self) -> List[Table]
+```
+
+### v0.9 - 人工反馈接口
+
+```python
+# core/feedback.py
+class FeedbackInterface:
+    """人工反馈接口"""
+    def edit_modules(self, plan: ExperimentPlan) -> ExperimentPlan
+    def adjust_scope(self, plan: ExperimentPlan, scope: str) -> ExperimentPlan
+    def lock_target(self, plan: ExperimentPlan, target: str) -> ExperimentPlan
+```
+
+支持：
+- CLI交互模式
+- API回调
+- Web界面 (可选)
+
+---
+
+## 完整执行流程
+
+```
+Paper Input (PDF/URL/LaTeX/arXiv)
+    ↓
+PaperParser
+    ↓
+PaperContext (统一结构)
+    ↓
+ReproductionAgent.generate_plan()
+    ↓
+┌─────────────────────────────────────────────┐
+│ Agent Mode                                  │
+│   build_task_prompt(paper, context, tier)   │
+│   → AgentProvider.run_task()                │
+│   → Agent自主完成：规划+风险+差距+验收       │
+└─────────────────────────────────────────────┘
+    ↓
+ExperimentPlan (中间表示)
+    ↓
+[可选] 人工反馈
+    - 模块划分编辑
+    - Scope删减
+    - 目标锁定
+    ↓
+ScriptGenerator
+    - reproduce.sh
+    - configs/hyperparams.yaml
+    ↓
+TestGenerator
+    - tests/test_*.py
+    ↓
+TemplateRenderer
+    ↓
+Output/
+    ├── plan.md
+    ├── plan.json
+    ├── reproduce.sh
+    ├── configs/
+    ├── tests/
+    ├── trajectories.json
+    └── cost_summary.json
+```
+
+---
+
+## 评测方案
+
+| 评测维度 | 方法 | 目标 |
+|---------|------|------|
+| 计划可执行性 | 人工打分 (1-5)，至少3位评估者 | ≥ 4.0 |
+| Baseline对比 | 与Paper2Code生成结果对比 | 显著优于Baseline |
+| 标准benchmark | SciReplicate-Bench / ResearchCodeBench | 达到SOTA水平 |
+| 真实场景验证 | 至少1个真实科研任务跑通 | 被同学实际使用 |
+| 失败模式分析 | 记录不可靠场景 | 文档化人工接管时机 |
 
 ---
 
 ## 完成标准
 
-- [ ] 支持 PDF / JSON / LaTeX 三种输入格式
-- [ ] 支持 OpenAI / Claude / vLLM 三种模型后端
-- [ ] Skills 体系完整运作（自动发现、context 注入、模板填充）
-- [ ] 自动生成 reproduce.sh 和测试代码
-- [ ] 有 baseline 对比，不接受仅主观 demo
-- [ ] 至少在一个真实科研任务中被同学实际使用
-- [ ] 产出失败模式分析，说明不可靠场景和人工接管时机
+- [x] 支持 PDF / URL / 搜索关键词 输入
+- [ ] 支持 LaTeX 源文件输入
+- [x] 支持 OpenAI / Claude 模型后端
+- [ ] 支持 vLLM / Ollama 本地模型
+- [ ] Skills 体系完整运作（自动发现、context注入）
+- [ ] 自动生成 reproduce.sh
+- [ ] 自动生成测试代码
+- [ ] 有 baseline 对比
+- [ ] 至少在一个真实科研任务中被实际使用
+- [ ] 产出失败模式分析文档
+
+---
+
+## 设计哲学
+
+1. **AI-Human协同**: AI负责结构化和初步分析，人类负责审核和关键决策
+2. **面向API设计**: 充分利用现代LLM的Agent能力
+3. **Skills即知识**: 将专业知识封装为可复用的模块
+4. **渐进式完善**: 从MVP开始，逐步添加完整功能
+
+---
+
+## 参考
+
+- [Paper2Code](https://github.com/paper2code/paper2code) - 论文复现工作流参考
+- [Claude Code Skills](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/skills) - Skills机制参考
