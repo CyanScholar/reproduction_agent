@@ -1,0 +1,16 @@
+[
+  {
+    "mode": "agent",
+    "trajectory": [
+      {
+        "type": "final_response",
+        "length": 21781
+      }
+    ],
+    "usage": {
+      "input_tokens": 31487,
+      "output_tokens": 9299,
+      "cached_tokens": 0
+    }
+  }
+]

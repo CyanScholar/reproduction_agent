@@ -1,0 +1,30 @@
+# Reproduction Planner Configuration
+
+# Model settings
+model:
+  name: "gpt-4o"  # Model name passed to API (e.g. gpt-4o, kimi-k2.5, claude-sonnet-4-20250514)
+  api_key: "${OPENAI_API_KEY}"
+  base_url: null  # Optional: custom API endpoint (e.g. https://api.kimi.com/coding/v1)
+  api_style: "openai_compatible"  # "openai_compatible", "anthropic", or "agent" (reserved for Claude Code/Codex)
+
+# Output settings
+output:
+  format: "markdown"  # markdown, json
+  include_trajectory: true  # Save LLM conversation trajectories
+  include_cost: true  # Save cost summary
+
+# Planning settings
+planning:
+  max_paper_length: 100000  # Max characters to send to LLM
+  phases:
+    - name: "planning"
+      enabled: true
+    - name: "risk_analysis"
+      enabled: true
+    - name: "acceptance"
+      enabled: true
+
+# Cost limits (in USD)
+limits:
+  max_cost_per_paper: 5.0
+  warn_cost: 2.0
